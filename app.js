@@ -66,6 +66,11 @@ app.use((error, req, res, next) => {
 mongoose
   .connect(mongooseUrl)
   .then(() => {
-    app.listen(8080);
+    const server = app.listen(8080);
+    const io = require("./socketIo").init(server);
+
+    io.on("connection", (socket) => {
+      console.log("User connected");
+    });
   })
   .catch((err) => console.log(err));

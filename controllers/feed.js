@@ -1,17 +1,23 @@
 const { validationResult } = require("express-validator");
 const Post = require("./../models/post");
 const fs = require("fs");
+const io = require("../socketIo");
 const User = require("../models/user");
 const path = require("path");
+const user = require("../models/user");
+
 exports.getPosts = (req, res, next) => {
   const currentPage = req.query.page || 1;
   const perPage = 2;
   let totalItems;
+
   Post.find()
     .countDocuments()
     .then((totalPosts) => {
       totalItems = totalPosts;
       return Post.find()
+        .populate("creator")
+        .sort({ createdAt: -1 })
         .skip((currentPage - 1) * perPage)
         .limit(perPage);
     })
@@ -67,6 +73,13 @@ exports.createPost = (req, res, next) => {
       return user.save();
     })
     .then((result) => {
+      io.getIo().emit("posts", {
+        action: "create",
+        post: {
+          ...post._doc,
+          creator: { _id: req.userId, name: creator.name },
+        },
+      });
       res.status(201).json({
         message: "Post created successfully!",
         post: post,
@@ -126,6 +139,7 @@ exports.updatePost = (req, res, next) => {
   }
 
   Post.findById(postId)
+    .populate("creator")
     .then((post) => {
       if (!post) {
         const error = new Error("Post const be found");
@@ -133,7 +147,7 @@ exports.updatePost = (req, res, next) => {
         throw error;
       }
 
-      if (post.creator.toString() !== req.userId) {
+      if (post.creator._id.toString() !== req.userId) {
         const error = new Error(
           "Update post Failed !!! (You cant update this file ,you didnt create it)"
         );
@@ -150,6 +164,7 @@ exports.updatePost = (req, res, next) => {
       return post.save();
     })
     .then((result) => {
+      io.getIo().emit("posts", { action: "update", post: result });
       res.status(200).json({
         message: "Post Updated!",
         post: result,
@@ -193,6 +208,11 @@ exports.deletePost = (req, res, next) => {
       return user.save();
     })
     .then((result) => {
+      io.getIo().emit("posts", {
+        action: "delete",
+        post: postId,
+      });
+
       res.status(200).json({
         message: "Post deleted!",
         post: result,
